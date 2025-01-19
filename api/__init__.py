@@ -15,8 +15,22 @@ from flask_cors import CORS
  
 def create_app(config=config_dict['dev']):
     app = Flask(__name__)
+
+
+    # Configure the app
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///your_database.db'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    #app.config['JWT_SECRET_KEY'] = 'your-secret-key'  # Change this!
+
     # Apply CORS to the entire app
-    CORS(app)
+    #CORS(app)
+    #CORS(app, resources={
+    '''r"/*": {
+        "origins": "*",  # In production, replace with specific origins
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+        }
+    })'''
     app.config.from_object(config)
     authorizations={
         "Bearer Auth":{

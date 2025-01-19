@@ -1,3 +1,4 @@
+from flask import session
 from flask_restx import Namespace, Resource, fields
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models.orders import Order, Resource as ResourceModel
@@ -159,7 +160,7 @@ class GetUpdateDelete(Resource):
 
 
     @order_namespace.expect(order_model)
-    @order_namespace.marshal_with(order_model)
+    #@order_namespace.marshal_with(order_model)
     @order_namespace.doc(
         description = "Update an order given an ID"
     )
@@ -169,45 +170,70 @@ class GetUpdateDelete(Resource):
             Update the order with id
         """
 
-        user = User.query.filter_by(userName=get_jwt_identity()).first()
-        order_to_update = Order.get_by_id(order_id)
+        try:
+            user = User.query.filter_by(userName=get_jwt_identity()).first()
+            order_to_update = Order.get_by_id(order_id)
 
-        if user.role != 'ADMIN' and order_to_update.user_id != user.id:
-            return {"message": "You are not authorized to update this order"}, HTTPStatus.FORBIDDEN
-        
-        if order_to_update.order_status != 'PENDING':
-            return {"message": "Only pending orders can be modified"}, HTTPStatus.BAD_REQUEST
+            if not order_to_update:
+                return {"message": "Order not found"}, HTTPStatus.NOT_FOUND
 
-        data = order_namespace.payload
+            if user.role != 'ADMIN' and order_to_update.user_id != user.id:
+                return {"message": "You are not authorized to update this order"}, HTTPStatus.FORBIDDEN
+            
+            if order_to_update.order_status != 'PENDING':
+                return {"message": "Only pending orders can be modified"}, HTTPStatus.BAD_REQUEST
 
-        # Check if order is feasible
-        color_resource = ResourceModel.query.filter_by(type='COLOR', name=data['color']).first()
-        material_resource = ResourceModel.query.filter_by(type='MATERIAL', name=data['material']).first()
+            data = order_namespace.payload
 
-        if not color_resource or not material_resource or color_resource.quantity < (data['quantity'] - order_to_update.quantity) or material_resource.quantity < (data['quantity'] - order_to_update.quantity):
-            return {"message": "Order update not feasible due to resource constraints"}, HTTPStatus.BAD_REQUEST
-        
-        # Update resources
-        color_resource.quantity += order_to_update.quantity
-        color_resource.quantity -= data['quantity']
-        material_resource.quantity += order_to_update.quantity
-        material_resource.quantity -= data['quantity']
+            # Check if order is feasible
+            color_resource = ResourceModel.query.filter_by(type='COLOR', name=data['color']).first()
+            material_resource = ResourceModel.query.filter_by(type='MATERIAL', name=data['material']).first()
+
+            if not color_resource or not material_resource:
+                return {"message": "Invalid color or material"}, HTTPStatus.BAD_REQUEST
+
+            quantity_diff = data['quantity'] - order_to_update.quantity
+            if color_resource.quantity < quantity_diff or material_resource.quantity < quantity_diff:
+                return {"message": "Order update not feasible due to resource constraints"}, HTTPStatus.BAD_REQUEST
+            
+            # Update resources
+            color_resource.quantity -= quantity_diff
+            material_resource.quantity -= quantity_diff
+
+            # Update order
+            order_to_update.quantity = data['quantity']
+            order_to_update.size = data['size']
+            order_to_update.color = data['color']
+            order_to_update.design = data['design']
+            order_to_update.material = data['material']
+            order_to_update.date_updated = datetime.utcnow()
+
+            db.session.commit()
+
+            # Create response
+            response = {
+                "message": "Order updated successfully",
+                "order": {
+                    "id": order_to_update.id,
+                    "quantity": order_to_update.quantity,
+                    "size": order_to_update.size,
+                    "order_status": order_to_update.order_status,
+                    "color": order_to_update.color,
+                    "design": order_to_update.design,
+                    "material": order_to_update.material,
+                    "date_created": str(order_to_update.date_created),
+                    "date_updated": str(order_to_update.date_updated)
+                }
+            }
+
+            return response, HTTPStatus.OK
+
+        except Exception as e:
+            db.session.rollback()
+            return {"message": f"Error updating order: {str(e)}"}, HTTPStatus.INTERNAL_SERVER_ERROR
 
 
-
-        order_to_update.quantity = data['quantity']
-        order_to_update.size = data['size']
-        order_to_update.color = data['color']
-        order_to_update.design = data['design']
-        order_to_update.material = data['material']
-        order_to_update.date_updated = datetime.utcnow()
-
-        db.session.commit()
-
-        return order_to_update, HTTPStatus.OK
-
-
-    @order_namespace.marshal_with(order_model)
+    #@order_namespace.marshal_with(order_model)
     @order_namespace.doc(
         description = "Delete an Order given the ID"
     )
@@ -218,26 +244,25 @@ class GetUpdateDelete(Resource):
         """
 
         user = User.query.filter_by(userName=get_jwt_identity()).first()
-        order_to_delete = Order.get_by_id(order_id)
+        order_to_delete = session.query(Order).get(order_id)
 
         if user.role != 'ADMIN' and order_to_delete.user_id != user.id:
             return {"message": "You are not authorized to delete this order"}, HTTPStatus.FORBIDDEN
 
-        if order_to_delete.order_status != 'PENDING':
-            return {"message": "Only pending orders can be deleted"}, HTTPStatus.BAD_REQUEST
+        #if order_to_delete.order_status != 'PENDING':
+         #   return {"message": "Only pending orders can be deleted"}, HTTPStatus.BAD_REQUEST
 
         # Restore resources
-        color_resource = ResourceModel.query.filter_by(type='COLOR', name=order_to_delete.color).first()
-        material_resource = ResourceModel.query.filter_by(type='MATERIAL', name=order_to_delete.material).first()
+        #color_resource = ResourceModel.query.filter_by(type='COLOR', name=order_to_delete.color).first()
+        #material_resource = ResourceModel.query.filter_by(type='MATERIAL', name=order_to_delete.material).first()
 
-        color_resource.quantity += order_to_delete.quantity
-        material_resource.quantity += order_to_delete.quantity
+        #color_resource.quantity += order_to_delete.quantity
+        #material_resource.quantity += order_to_delete.quantity
 
         order_to_delete.delete()
         db.session.commit()
 
         return order_to_delete, HTTPStatus.NO_CONTENT
-
 
 
 
