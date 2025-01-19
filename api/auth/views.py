@@ -93,7 +93,9 @@ class Login(Resource):
 
             response = {
                 'access_token': access_token,
-                'refresh_token' : refresh_token
+                'refresh_token' : refresh_token,
+                'userName': user.userName,
+                'is-staff' : user.is_staff
             }
 
             return response , HTTPStatus.OK

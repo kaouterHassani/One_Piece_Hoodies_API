@@ -9,12 +9,14 @@ from .models.users import User
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from werkzeug.exceptions import NotFound, MethodNotAllowed
+from flask_cors import CORS
 
 
  
 def create_app(config=config_dict['dev']):
     app = Flask(__name__)
-
+    # Apply CORS to the entire app
+    CORS(app)
     app.config.from_object(config)
     authorizations={
         "Bearer Auth":{
